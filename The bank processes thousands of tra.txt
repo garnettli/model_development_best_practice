@@ -3,3 +3,13 @@ The bank processes thousands of transactions daily, yet currently lacks an autom
 Furthermore, this manual process introduces a significant lag in reporting. Senior management, seeking immediate insights into sudden drops in deposits or unusual transaction patterns, cannot afford the delays caused by manual tagging. They require near real-time understanding of where funds are moving and the underlying reasons for these shifts to make timely decisions.
 
 Our newly developed hybrid model addresses these challenges by combining business rules with machine learning to score transactions at scale and in near real-time. This dual-layer approach provides enhanced granularity and flexibility, as transactions can simultaneously have multiple purposes. For instance, a transaction originating from a Tesla account might pertain to an inventory invoice, and therefore its purposes could be classified as “Tesla,” “invoice,” and “inventory purchases.” By scoring transactions with both business rules and machine learning, the model offers richer insights, enabling LOBs and senior management to make faster, more informed decisions while eliminating inefficiencies and ensuring consistency across teams.
+
+The transaction purpose identification model employs a combination of business rules, keyword searches, and machine learning to enrich transactions with one or multiple purposes.
+
+Business Rules: These rules are primarily account number-driven and are already familiar to the business. They serve as a foundational layer for tagging transactions based on predefined criteria.
+
+Keyword Search: This method includes 50 broader categories, such as "Inventory Purchase," "Invoice," and "Bank-to-Bank Transfer," which were derived through collaboration with LOB. The keyword search examines the transaction description field along with other fields to assign relevant purposes.
+
+Machine Learning: Using natural language processing (NLP) techniques, the machine learning component analyzes transaction description fields and other variables, such as sender/receiver names, to classify transaction purposes. The model outputs the category with the highest probability.
+
+To ensure comprehensive insights, the model applies all three methods—business rules, keyword searches, and machine learning—to the data. Results from each method are stored in separate columns, allowing users to access multiple layers of insights and compare findings when differences arise.
