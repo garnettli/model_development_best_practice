@@ -13,3 +13,15 @@ Keyword Search: This method includes 50 broader categories, such as "Inventory P
 Machine Learning: Using natural language processing (NLP) techniques, the machine learning component analyzes transaction description fields and other variables, such as sender/receiver names, to classify transaction purposes. The model outputs the category with the highest probability.
 
 To ensure comprehensive insights, the model applies all three methods—business rules, keyword searches, and machine learning—to the data. Results from each method are stored in separate columns, allowing users to access multiple layers of insights and compare findings when differences arise.
+
+Dependent Variable Definition and Labeling
+
+The data used for the transaction purpose identification model was initially unlabeled, requiring the creation of proxies to label the data.
+
+Wire Rules: The first step involved using predefined wire rules to identify transactions that were already familiar to the LOB. Transactions that were not covered by the business rules were then passed to the next phase.
+
+Keyword Search Rules: To expand the labeled dataset, the team developed keyword search rules. These rules looked for specific keywords associated with a category, primarily within the OBI field, as well as in fields such as beneficiary name and originating name.
+
+The team engaged in a highly iterative process with the LOB to refine these rules. Proposed rules were tested and shared with the LOB for review. Based on their feedback, keywords were added, removed, or modified to improve accuracy. Through this collaborative process, the team finalized approximately 50 keyword rules. A chart detailing all keyword search logic will be attached below to provide further clarity.
+
+These 50 categories became the training data labels for the model. The machine learning component of the model uses this labeled data to identify patterns beyond the fields used for labeling, such as OBI, beneficiary name, and originating name. It also incorporates additional fields like debit/credit account numbers and sender/receiver name information to capture the pattern of the purpose code effectively. This approach ensures that the model generalizes effectively and captures broader transaction patterns, providing reliable dependent variables for training.
