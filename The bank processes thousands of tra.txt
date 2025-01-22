@@ -30,3 +30,10 @@ These 50 categories became the training data labels for the model. The machine l
 The input data is formatted as a matrix, which is the result of applying multiple NLP techniques to clean and transform the text column. The text column was formed by concatenating seven raw input columns into a single long string, with each string separated by a white space. This transformation ensures that the data is in a structured format suitable for model training and fitting.
 
 The dependent variable is derived from the results of keyword searches, which classify transactions into one of 50 predefined categories. These categories serve as the class labels for the model. In production, the model will use these labels to classify incoming transactions into their respective transaction purpose categories.
+
+
+
+Collaborated with the Line of Business (LOB) to develop a master taxonomy for storing all known business rules, primarily account number-driven, with some special rules utilizing additional attributes. Designed merging logic to label a subset of the data using these business rules.
+Partnered with the LOB to create 48 keyword-based rules for labeling transactions by searching within the OBI, org_name, and bnf_name fields. These keyword results also run on the data labeled by business rules to provide an additional layer of insights.
+Implemented a multi-class classification model to predict purpose codes for transactions not covered by rules or keyword searches. The model was trained using proxy labels derived from the OBI keyword results to learn patterns and make predictions based on the highest probability.
+Published the final results back to the ILMS system for the Treasury team’s consumption. The output includes three columns: business rules results, OBI keyword search results, and ML prediction results.
