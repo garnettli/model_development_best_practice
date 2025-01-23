@@ -37,3 +37,22 @@ Collaborated with the Line of Business (LOB) to develop a master taxonomy for st
 Partnered with the LOB to create 48 keyword-based rules for labeling transactions by searching within the OBI, org_name, and bnf_name fields. These keyword results also run on the data labeled by business rules to provide an additional layer of insights.
 Implemented a multi-class classification model to predict purpose codes for transactions not covered by rules or keyword searches. The model was trained using proxy labels derived from the OBI keyword results to learn patterns and make predictions based on the highest probability.
 Published the final results back to the ILMS system for the Treasury team’s consumption. The output includes three columns: business rules results, OBI keyword search results, and ML prediction results.
+
+
+The transaction purpose identification model employs a hybrid framework comprising wires rules, OBI keyword searches, and an ML component to maximize coverage and accuracy while minimizing the risk of misclassification. This approach ensures a structured and efficient methodology for handling complex transactional data.
+
+Wires Rules
+The wires rules are predefined and well-understood by the Line of Business (LOB), making them the most reliable component of the framework. These rules are primarily account number-driven and introduce minimal uncertainty. To ensure accuracy and prevent misclassification, a rule-based approach was adopted to label this portion of the data.
+
+OBI Keyword Searches
+The OBI keyword searches are the result of an iterative collaboration with the LOB, leveraging their domain expertise to define keywords that align with common transaction categories. This component not only provides an additional layer of insights on top of the wires rules but also acts as the training data for the ML model. Since the data is inherently unlabeled, OBI keyword searches serve as a proxy labeling mechanism.
+
+The current set of keywords represents the best possible iteration based on available information. As the model operates in production, user feedback will be collected to refine and improve the OBI keyword rules over time.
+The long-term objective is to increase OBI keyword coverage while reducing reliance on the ML model, thereby minimizing uncertainty and improving interpretability.
+ML Component
+The ML model is designed to handle the most challenging portion of the data, which is characterized by a high proportion of null or unstructured values.
+
+Some null values stem from a known data issue, which will be addressed by the ILMS 2.0 system scheduled for production in Q3 2025. Others result from unstandardized input formats by customers, making fields such as the OBI field occasionally uninformative.
+To mitigate these challenges, the ML model incorporates a broader set of features, including account numbers, sender and receiver information, and the transaction description fields (OBI, bnf_name, and org_name). This holistic feature set ensures the model can identify patterns indicative of transaction purpose codes.
+Additionally, the LOB manually reviewed the ML model’s predictions and restricted its use to top-performing categories, significantly reducing the risk of misclassification within this complex dataset.
+This hybrid approach ensures that each component contributes to the overall robustness of the framework, effectively balancing the strengths of rule-based methods and machine learning to achieve a comprehensive and reliable solution.
