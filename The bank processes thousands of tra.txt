@@ -56,3 +56,62 @@ Some null values stem from a known data issue, which will be addressed by the IL
 To mitigate these challenges, the ML model incorporates a broader set of features, including account numbers, sender and receiver information, and the transaction description fields (OBI, bnf_name, and org_name). This holistic feature set ensures the model can identify patterns indicative of transaction purpose codes.
 Additionally, the LOB manually reviewed the ML model’s predictions and restricted its use to top-performing categories, significantly reducing the risk of misclassification within this complex dataset.
 This hybrid approach ensures that each component contributes to the overall robustness of the framework, effectively balancing the strengths of rule-based methods and machine learning to achieve a comprehensive and reliable solution.
+
+
+
+
+import random
+from pyspark.sql.functions import udf
+from pyspark.sql.types import StringType
+
+# Common QWERTY keyboard adjacency for simulating typos
+keyboard_adjacent = {
+    'q': 'wa', 'w': 'qse', 'e': 'wsdr', 'r': 'etdf', 't': 'ryfg', 'y': 'tugh', 'u': 'yihj',
+    'i': 'uojk', 'o': 'ipkl', 'p': 'ol',
+    'a': 'qwsz', 's': 'awedxz', 'd': 'serfcx', 'f': 'drtgvc', 'g': 'ftyhbv', 'h': 'gyujnb',
+    'j': 'huikm', 'k': 'jiolm', 'l': 'kop',
+    'z': 'asx', 'x': 'zsdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn', 'n': 'bhjm', 'm': 'njk',
+}
+
+def introduce_typos(text, typo_ratio=0.1):
+    """Introduce random typos into a given text based on the typo_ratio."""
+    if not text:
+        return text
+
+    text = list(text)  # Convert string to a list of characters
+    num_typos = int(len(text) * typo_ratio)  # Determine number of typos
+
+    for _ in range(num_typos):
+        idx = random.randint(0, len(text) - 1)  # Random character index
+        char = text[idx]
+
+        typo_type = random.choice(["swap", "replace", "delete", "insert"])
+
+        if typo_type == "swap" and idx < len(text) - 1:  
+            # Swap with next character
+            text[idx], text[idx + 1] = text[idx + 1], text[idx]
+
+        elif typo_type == "replace" and char.lower() in keyboard_adjacent:
+            # Replace with an adjacent key
+            text[idx] = random.choice(keyboard_adjacent[char.lower()])
+
+        elif typo_type == "delete" and len(text) > 1:
+            # Remove the character
+            text.pop(idx)
+
+        elif typo_type == "insert" and char.lower() in keyboard_adjacent:
+            # Insert a random adjacent key
+            text.insert(idx, random.choice(keyboard_adjacent[char.lower()]))
+
+    return "".join(text)
+
+# Register the function as a PySpark UDF
+typo_udf = udf(introduce_typos, StringType())
+
+# Apply it to your DataFrame with different typo ratios
+df_test = df_test.withColumn("typo_10", typo_udf(df_test["stemmed_words"]))
+df_test = df_test.withColumn("typo_20", typo_udf(df_test["stemmed_words"]))
+df_test = df_test.withColumn("typo_30", typo_udf(df_test["stemmed_words"]))
+
+# Show results
+df_test.select("stemmed_words", "typo_10", "typo_20", "typo_30").show(truncate=False)
