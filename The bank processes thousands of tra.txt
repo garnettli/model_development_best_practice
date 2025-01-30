@@ -235,3 +235,76 @@ Research on manual data entry methods highlights that human error rates are appr
 RESEARCHGATE.NET
 
 These findings suggest that typical human typists have error rates within the 1% to 5% range.
+
+
+import random
+import re
+from pyspark.sql.functions import udf, lit
+from pyspark.sql.types import StringType
+
+# QWERTY keyboard adjacency mapping
+keyboard_adjacent = {
+    'q': 'wa', 'w': 'qse', 'e': 'wsdr', 'r': 'etdf', 't': 'ryfg', 'y': 'tugh', 'u': 'yihj',
+    'i': 'uojk', 'o': 'ipkl', 'p': 'ol',
+    'a': 'qwsz', 's': 'awedxz', 'd': 'serfcx', 'f': 'drtgvc', 'g': 'ftyhbv', 'h': 'gyujnb',
+    'j': 'huikm', 'k': 'jiolm', 'l': 'kop',
+    'z': 'asx', 'x': 'zsdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn', 'n': 'bhjm', 'm': 'njk',
+}
+
+# Words to exclude from typo generation
+EXCLUDE_WORDS = {"miss"}  # Add more words if needed
+
+def is_number(word):
+    """Check if a word consists only of digits."""
+    return bool(re.fullmatch(r"\d+", word))  # Matches only numeric words
+
+def introduce_typos(text, typo_ratio):
+    """Introduce typos while excluding specific words and numbers, ensuring at least 1 typo in the entire document."""
+    if not text or typo_ratio <= 0:
+        return text  # Return unchanged if empty or no typo needed
+
+    words = text.split()  # Tokenize by whitespace
+    valid_word_indices = [i for i, word in enumerate(words) if word not in EXCLUDE_WORDS and not is_number(word)]
+    
+    if not valid_word_indices:
+        return text  # If no valid words to modify, return original text
+
+    total_chars = sum(len(words[i]) for i in valid_word_indices)  # Count total modifiable characters
+    total_typos = max(1, int(total_chars * typo_ratio))  # Ensure at least 1 typo for the entire document
+
+    for _ in range(total_typos):
+        word_idx = random.choice(valid_word_indices)  # Choose a random valid word index
+        word = list(words[word_idx])  # Convert to list for mutability
+        
+        if len(word) == 0:
+            continue  # Skip empty words
+        
+        char_idx = random.randint(0, len(word) - 1)
+        char = word[char_idx]
+
+        typo_type = random.choice(["swap", "replace", "delete", "insert"])
+
+        if typo_type == "swap" and char_idx < len(word) - 1:
+            word[char_idx], word[char_idx + 1] = word[char_idx + 1], word[char_idx]
+        elif typo_type == "replace" and char.lower() in keyboard_adjacent:
+            word[char_idx] = random.choice(keyboard_adjacent[char.lower()])
+        elif typo_type == "delete" and len(word) > 1:
+            word.pop(char_idx)
+        elif typo_type == "insert" and char.lower() in keyboard_adjacent:
+            word.insert(char_idx, random.choice(keyboard_adjacent[char.lower()]))
+
+        words[word_idx] = "".join(word)  # Update the modified word in the list
+
+    return " ".join(words)  # Reconstruct the document text
+
+# Convert the function into a PySpark UDF
+typo_udf = udf(lambda text, ratio: introduce_typos(text, float(ratio)), StringType())
+
+# Apply different typo ratios in a PySpark DataFrame
+df_test = df_test.withColumn("typo_05", typo_udf(df_test["stemmed_words"], lit(0.05)))
+df_test = df_test.withColumn("typo_10", typo_udf(df_test["stemmed_words"], lit(0.1)))
+df_test = df_test.withColumn("typo_20", typo_udf(df_test["stemmed_words"], lit(0.2)))
+
+# Show results
+df_test.select("stemmed_words", "typo_05", "typo_10", "typo_20").show(truncate=False)
+
