@@ -225,3 +225,13 @@ The sensitivity analysis demonstrates that the model is **robust to minor typogr
 These results validate that the model is well-suited for real-world applications where transaction descriptions are manually entered by bank personnel, as long as typo rates remain within reasonable human error thresholds. Future improvements could explore additional robustness techniques, such as **character-level embeddings** or **spell correction mechanisms**, to further mitigate classification errors under high-stress conditions.
 
 
+
+Studies indicate that typical human typists exhibit error rates between 1% and 5%. For instance:
+
+A study published in Control Engineering notes that even skilled typists have error rates around 1 error per 100 words, equating to a 1% error rate. 
+CONTROLENG.COM
+
+Research on manual data entry methods highlights that human error rates are approximately 1-5%, which can impact data accuracy and quality assurance. 
+RESEARCHGATE.NET
+
+These findings suggest that typical human typists have error rates within the 1% to 5% range.
