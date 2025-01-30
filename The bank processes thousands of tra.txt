@@ -60,10 +60,11 @@ This hybrid approach ensures that each component contributes to the overall robu
 
 
 import random
+import re
 from pyspark.sql.functions import udf, lit
 from pyspark.sql.types import StringType
 
-# QWERTY keyboard adjacency mapping for realistic typos
+# QWERTY keyboard adjacency mapping
 keyboard_adjacent = {
     'q': 'wa', 'w': 'qse', 'e': 'wsdr', 'r': 'etdf', 't': 'ryfg', 'y': 'tugh', 'u': 'yihj',
     'i': 'uojk', 'o': 'ipkl', 'p': 'ol',
@@ -72,33 +73,44 @@ keyboard_adjacent = {
     'z': 'asx', 'x': 'zsdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn', 'n': 'bhjm', 'm': 'njk',
 }
 
+# Words to exclude from typo generation
+EXCLUDE_WORDS = {"miss"}  # Add more words if needed
+
+def is_number(word):
+    """Check if a word consists only of digits."""
+    return bool(re.fullmatch(r"\d+", word))  # Matches only numeric words
+
 def introduce_typos(text, typo_ratio):
-    """Introduce typos based on a given typo ratio."""
+    """Introduce typos while excluding specific words and numbers."""
     if not text or typo_ratio <= 0:
         return text  # Return unchanged if empty or no typo needed
 
-    text = list(text)  # Convert to list for mutability
-    num_typos = int(len(text) * typo_ratio)  # Compute number of typos
+    words = text.split()  # Tokenize by whitespace
+    for i in range(len(words)):
+        if words[i] in EXCLUDE_WORDS or is_number(words[i]):
+            continue  # Skip excluded words and numbers
 
-    for _ in range(num_typos):
-        idx = random.randint(0, len(text) - 1)  # Pick a random character index
-        char = text[idx]
+        word = list(words[i])  # Convert to list for mutability
+        num_typos = int(len(word) * typo_ratio)  # Compute number of typos
 
-        typo_type = random.choice(["swap", "replace", "delete", "insert"])
+        for _ in range(num_typos):
+            idx = random.randint(0, len(word) - 1)  # Pick a random character index
+            char = word[idx]
 
-        if typo_type == "swap" and idx < len(text) - 1:
-            text[idx], text[idx + 1] = text[idx + 1], text[idx]
+            typo_type = random.choice(["swap", "replace", "delete", "insert"])
 
-        elif typo_type == "replace" and char.lower() in keyboard_adjacent:
-            text[idx] = random.choice(keyboard_adjacent[char.lower()])
+            if typo_type == "swap" and idx < len(word) - 1:
+                word[idx], word[idx + 1] = word[idx + 1], word[idx]
+            elif typo_type == "replace" and char.lower() in keyboard_adjacent:
+                word[idx] = random.choice(keyboard_adjacent[char.lower()])
+            elif typo_type == "delete" and len(word) > 1:
+                word.pop(idx)
+            elif typo_type == "insert" and char.lower() in keyboard_adjacent:
+                word.insert(idx, random.choice(keyboard_adjacent[char.lower()]))
 
-        elif typo_type == "delete" and len(text) > 1:
-            text.pop(idx)
+        words[i] = "".join(word)  # Convert back to string
 
-        elif typo_type == "insert" and char.lower() in keyboard_adjacent:
-            text.insert(idx, random.choice(keyboard_adjacent[char.lower()]))
-
-    return "".join(text)
+    return " ".join(words)  # Reconstruct sentence
 
 # Convert the function into a PySpark UDF
 typo_udf = udf(lambda text, ratio: introduce_typos(text, float(ratio)), StringType())
@@ -110,4 +122,3 @@ df_test = df_test.withColumn("typo_30", typo_udf(df_test["stemmed_words"], lit(0
 
 # Show results
 df_test.select("stemmed_words", "typo_10", "typo_20", "typo_30").show(truncate=False)
-
