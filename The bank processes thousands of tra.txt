@@ -259,52 +259,48 @@ def is_number(word):
     return bool(re.fullmatch(r"\d+", word))  # Matches only numeric words
 
 def introduce_typos(text, typo_ratio):
-    """Introduce typos while excluding specific words and numbers, ensuring at least 1 typo in the entire document."""
+    """Introduce typos while excluding specific words and numbers."""
     if not text or typo_ratio <= 0:
         return text  # Return unchanged if empty or no typo needed
 
-    words = text.split()  # Tokenize by whitespace
-    valid_word_indices = [i for i, word in enumerate(words) if word not in EXCLUDE_WORDS and not is_number(word)]
-    
-    if not valid_word_indices:
-        return text  # If no valid words to modify, return original text
+    total_chars = len(text.replace(" ", ""))  # Exclude spaces from total count
+    total_typos = round(total_chars * typo_ratio)  # Round naturally
 
-    total_chars = sum(len(words[i]) for i in valid_word_indices)  # Count total modifiable characters
-    total_typos = max(1, int(total_chars * typo_ratio))  # Ensure at least 1 typo for the entire document
+    if total_typos == 0:
+        return text  # No typos if rounded to 0
 
-    for _ in range(total_typos):
-        word_idx = random.choice(valid_word_indices)  # Choose a random valid word index
-        word = list(words[word_idx])  # Convert to list for mutability
+    text_list = list(text)  # Convert to list for mutability
+    typo_positions = random.sample(range(len(text_list)), total_typos)  # Select random typo positions
+
+    for idx in typo_positions:
+        char = text_list[idx]
         
-        if len(word) == 0:
-            continue  # Skip empty words
-        
-        char_idx = random.randint(0, len(word) - 1)
-        char = word[char_idx]
+        # Skip if the character is a space or in an excluded word
+        if char.isspace():
+            continue
 
         typo_type = random.choice(["swap", "replace", "delete", "insert"])
 
-        if typo_type == "swap" and char_idx < len(word) - 1:
-            word[char_idx], word[char_idx + 1] = word[char_idx + 1], word[char_idx]
+        if typo_type == "swap" and idx < len(text_list) - 1 and not text_list[idx + 1].isspace():
+            text_list[idx], text_list[idx + 1] = text_list[idx + 1], text_list[idx]
         elif typo_type == "replace" and char.lower() in keyboard_adjacent:
-            word[char_idx] = random.choice(keyboard_adjacent[char.lower()])
-        elif typo_type == "delete" and len(word) > 1:
-            word.pop(char_idx)
+            text_list[idx] = random.choice(keyboard_adjacent[char.lower()])
+        elif typo_type == "delete":
+            text_list[idx] = ''  # Remove character
         elif typo_type == "insert" and char.lower() in keyboard_adjacent:
-            word.insert(char_idx, random.choice(keyboard_adjacent[char.lower()]))
+            text_list.insert(idx, random.choice(keyboard_adjacent[char.lower()]))
 
-        words[word_idx] = "".join(word)  # Update the modified word in the list
-
-    return " ".join(words)  # Reconstruct the document text
+    return "".join(text_list)  # Reconstruct text
 
 # Convert the function into a PySpark UDF
 typo_udf = udf(lambda text, ratio: introduce_typos(text, float(ratio)), StringType())
 
-# Apply different typo ratios in a PySpark DataFrame
+# Apply different typo ratios
+df_test = df_test.withColumn("typo_03", typo_udf(df_test["stemmed_words"], lit(0.03)))
 df_test = df_test.withColumn("typo_05", typo_udf(df_test["stemmed_words"], lit(0.05)))
 df_test = df_test.withColumn("typo_10", typo_udf(df_test["stemmed_words"], lit(0.1)))
-df_test = df_test.withColumn("typo_20", typo_udf(df_test["stemmed_words"], lit(0.2)))
 
 # Show results
-df_test.select("stemmed_words", "typo_05", "typo_10", "typo_20").show(truncate=False)
+df_test.select("stemmed_words", "typo_03", "typo_05", "typo_10").show(truncate=False)
+
 
