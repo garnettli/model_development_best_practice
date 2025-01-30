@@ -59,12 +59,11 @@ This hybrid approach ensures that each component contributes to the overall robu
 
 
 
-
 import random
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import udf, lit
 from pyspark.sql.types import StringType
 
-# Common QWERTY keyboard adjacency for simulating typos
+# QWERTY keyboard adjacency mapping for realistic typos
 keyboard_adjacent = {
     'q': 'wa', 'w': 'qse', 'e': 'wsdr', 'r': 'etdf', 't': 'ryfg', 'y': 'tugh', 'u': 'yihj',
     'i': 'uojk', 'o': 'ipkl', 'p': 'ol',
@@ -73,45 +72,42 @@ keyboard_adjacent = {
     'z': 'asx', 'x': 'zsdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn', 'n': 'bhjm', 'm': 'njk',
 }
 
-def introduce_typos(text, typo_ratio=0.1):
-    """Introduce random typos into a given text based on the typo_ratio."""
-    if not text:
-        return text
+def introduce_typos(text, typo_ratio):
+    """Introduce typos based on a given typo ratio."""
+    if not text or typo_ratio <= 0:
+        return text  # Return unchanged if empty or no typo needed
 
-    text = list(text)  # Convert string to a list of characters
-    num_typos = int(len(text) * typo_ratio)  # Determine number of typos
+    text = list(text)  # Convert to list for mutability
+    num_typos = int(len(text) * typo_ratio)  # Compute number of typos
 
     for _ in range(num_typos):
-        idx = random.randint(0, len(text) - 1)  # Random character index
+        idx = random.randint(0, len(text) - 1)  # Pick a random character index
         char = text[idx]
 
         typo_type = random.choice(["swap", "replace", "delete", "insert"])
 
-        if typo_type == "swap" and idx < len(text) - 1:  
-            # Swap with next character
+        if typo_type == "swap" and idx < len(text) - 1:
             text[idx], text[idx + 1] = text[idx + 1], text[idx]
 
         elif typo_type == "replace" and char.lower() in keyboard_adjacent:
-            # Replace with an adjacent key
             text[idx] = random.choice(keyboard_adjacent[char.lower()])
 
         elif typo_type == "delete" and len(text) > 1:
-            # Remove the character
             text.pop(idx)
 
         elif typo_type == "insert" and char.lower() in keyboard_adjacent:
-            # Insert a random adjacent key
             text.insert(idx, random.choice(keyboard_adjacent[char.lower()]))
 
     return "".join(text)
 
-# Register the function as a PySpark UDF
-typo_udf = udf(introduce_typos, StringType())
+# Convert the function into a PySpark UDF
+typo_udf = udf(lambda text, ratio: introduce_typos(text, float(ratio)), StringType())
 
-# Apply it to your DataFrame with different typo ratios
-df_test = df_test.withColumn("typo_10", typo_udf(df_test["stemmed_words"]))
-df_test = df_test.withColumn("typo_20", typo_udf(df_test["stemmed_words"]))
-df_test = df_test.withColumn("typo_30", typo_udf(df_test["stemmed_words"]))
+# Apply different typo ratios
+df_test = df_test.withColumn("typo_10", typo_udf(df_test["stemmed_words"], lit(0.1)))
+df_test = df_test.withColumn("typo_20", typo_udf(df_test["stemmed_words"], lit(0.2)))
+df_test = df_test.withColumn("typo_30", typo_udf(df_test["stemmed_words"], lit(0.3)))
 
 # Show results
 df_test.select("stemmed_words", "typo_10", "typo_20", "typo_30").show(truncate=False)
+
