@@ -304,3 +304,28 @@ df_test = df_test.withColumn("typo_10", typo_udf(df_test["stemmed_words"], lit(0
 df_test.select("stemmed_words", "typo_03", "typo_05", "typo_10").show(truncate=False)
 
 
+The reason why logistic regression (LR) outperformed random forest (RF) and Naïve Bayes (NB) likely comes down to how these models handle sparse, high-dimensional text data and feature importance. Let’s break it down:
+
+1. Logistic Regression’s Strength in Linear Decision Boundaries
+Your dataset consists of tokenized text features transformed into a binary matrix (0s and 1s) with Chi-Square feature selection. This means that only the most relevant words (features) remain.
+Logistic regression is well-suited for this because it models a linear decision boundary. If a single word strongly correlates with a transaction purpose, LR will assign it a strong weight in the model.
+In text classification, linear models often perform surprisingly well because text-based features have strong individual signals (e.g., certain words nearly always indicate a specific category).
+2. Random Forest Struggles with Sparse Data & Bootstrapping Issues
+Random Forest (RF), being an ensemble of decision trees, works well when feature interactions are important. However, it struggles when individual features have strong predictive power on their own.
+The problem is that RF performs bootstrapping (sampling with replacement), meaning that some decision trees might miss key words that define the transaction purpose. If a tree doesn’t see the most relevant word, it won’t learn the right split.
+RF also splits on individual features at each node, which can make it hard to capture the significance of a single keyword compared to a global weight in LR.
+3. Naïve Bayes Might Be Too Simple or Overly Independent
+Naïve Bayes (NB) assumes feature independence, which is rarely true for real-world text data.
+If your text data has strong correlations between certain words and transaction purpose, the independence assumption may hurt performance.
+Additionally, NB works well when feature counts matter, but since your dataset is already binarized (0s and 1s), it loses some of the probability advantage it usually gets from term frequency.
+Conclusion
+Logistic Regression won because:
+It assigns strong weights to important words without ignoring them (like RF might during bootstrapping).
+It handles sparse binary matrices well since it looks for linear relationships between words and purpose codes.
+Random Forest lost because:
+Bootstrapping diluted important words across trees.
+It struggled with sparse binary data, which is not ideal for tree-based models.
+Naïve Bayes lost because:
+It assumes feature independence, which may not hold for transaction-related keywords.
+The binarization (0/1) removed some of its advantage in probability-based classification.
+
