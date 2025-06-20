@@ -1,0 +1,64 @@
+from pyspark.sql.functions import expr, lit
+from pyspark.sql import DataFrame
+
+# Columns used for matching
+matching_columns = [
+    "dr_acct_num", "cr_acct_num",
+    "dr_fin_inst", "cr_fin_inst",
+    "dr_lob", "cr_lob",
+    "dr_acct_nm", "cr_acct_nm",
+    "tentr", "ncorg", "tdisc"
+]
+
+# Assume like_rules_df contains:
+# - The 1300 rules
+# - Matching columns (some with wildcards, some exact, some null)
+# - Purpose code levels: purpose_lvl1, purpose_lvl2, purpose_lvl3, purpose_lvl4
+rules = like_rules_df.collect()  # Bring rules to driver (safe for 1300)
+
+# Container for matched transactions
+matched_df = None
+
+# Loop over each rule
+for rule in rules:
+    conditions = []
+    
+    for colname in matching_columns:
+        val = rule[colname]
+        if val is None:
+            continue  # Ignore null fields (match anything)
+        elif '%' in val:
+            regex = val.replace('%', '.*')
+            conditions.append(f"{colname} RLIKE '{regex}'")
+        else:
+            conditions.append(f"{colname} = '{val}'")
+    
+    # Join conditions with AND
+    condition_expr = " AND ".join(conditions)
+    
+    # Filter transactions that match this rule
+    matched = transactions_df.filter(expr(condition_expr)) \
+        .withColumn("rule_id", lit(rule['rule_id'])) \
+        .withColumn("purpose_lvl1", lit(rule['purpose_lvl1'])) \
+        .withColumn("purpose_lvl2", lit(rule['purpose_lvl2'])) \
+        .withColumn("purpose_lvl3", lit(rule['purpose_lvl3'])) \
+        .withColumn("purpose_lvl4", lit(rule['purpose_lvl4']))
+    
+    # Append results
+    matched_df = matched if matched_df is None else matched_df.unionByName(matched)
+
+# matched_df now contains all matched transactions + purpose codes
+
+
+from pyspark.sql.window import Window
+from pyspark.sql.functions import row_number
+
+window = Window.partitionBy("transaction_id").orderBy("rule_id")  # or use custom priority
+final_matched = matched_df.withColumn("rn", row_number().over(window)).filter("rn = 1")
+
+
+result = transactions_df.join(
+    final_matched.select("transaction_id", "purpose_lvl1", "purpose_lvl2", "purpose_lvl3", "purpose_lvl4"),
+    on="transaction_id",
+    how="left"
+)
