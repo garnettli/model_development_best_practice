@@ -66,3 +66,77 @@ result = transactions_df.join(
     on="transaction_id",
     how="left"
 )
+
+
+
+
+#cross join and filter
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, udf, lit, monotonically_increasing_id, row_number
+from pyspark.sql.window import Window
+from pyspark.sql.types import StringType
+
+# 1. Setup Spark
+spark = SparkSession.builder.getOrCreate()
+
+# 2. Safe regex conversion function
+def to_safe_regex(val):
+    if val is None:
+        return None
+    val = val.replace("'", "''")        # Escape single quotes for Spark SQL
+    val = val.replace("%", ".*")        # Convert SQL wildcard to regex
+    if not val.startswith('%'):
+        val = '^' + val
+    if not val.endswith('%'):
+        val = val + '$'
+    return val
+
+regex_udf = udf(to_safe_regex, StringType())
+
+# 3. Columns used for matching
+matching_columns = [
+    "dr_acct_num", "cr_acct_num",
+    "dr_fin_inst", "cr_fin_inst",
+    "dr_lob", "cr_lob",
+    "dr_acct_nm", "cr_acct_nm",
+    "tentr", "ncorg", "tdisc"
+]
+
+# 4. Preprocess rules_df to generate regex-safe columns
+for colname in matching_columns:
+    rules_df = rules_df.withColumn(f"{colname}_regex_safe", regex_udf(col(colname)))
+
+# 5. Add transaction ID to transactions_df
+transactions_df = transactions_df.withColumn("txn_id", monotonically_increasing_id())
+
+# 6. Broadcast rules_df
+rules_broadcast = rules_df.select(
+    ['rule_id', 'purpose_lvl1', 'purpose_lvl2', 'purpose_lvl3', 'purpose_lvl4'] +
+    [f"{col}_regex_safe" for col in matching_columns]
+)
+
+# 7. Cross join (lazy — does not materialize yet)
+joined_df = transactions_df.crossJoin(rules_broadcast)
+
+# 8. Build vectorized filter condition
+condition = lit(True)
+for colname in matching_columns:
+    regex_col = f"{colname}_regex_safe"
+    condition = condition & (
+        col(regex_col).isNull() | col(colname).rlike(col(regex_col))
+    )
+
+# 9. Filter matches
+filtered_df = joined_df.filter(condition)
+
+# 10. If multiple rules match, pick the top-priority rule
+w = Window.partitionBy("txn_id").orderBy("rule_id")  # use priority field if available
+final_matched = filtered_df.withColumn("rn", row_number().over(w)).filter("rn = 1")
+
+# 11. Join purpose codes back to original transactions
+transactions_with_purpose = transactions_df.join(
+    final_matched.select("txn_id", "purpose_lvl1", "purpose_lvl2", "purpose_lvl3", "purpose_lvl4"),
+    on="txn_id",
+    how="left"
+)
