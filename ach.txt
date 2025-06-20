@@ -73,19 +73,22 @@ result = transactions_df.join(
 #cross join and filter
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, udf, lit, monotonically_increasing_id, row_number
+from pyspark.sql.functions import (
+    col, lit, udf, monotonically_increasing_id, row_number,
+    when
+)
 from pyspark.sql.window import Window
 from pyspark.sql.types import StringType
 
-# 1. Setup Spark
+# 1. Initialize Spark
 spark = SparkSession.builder.getOrCreate()
 
-# 2. Safe regex conversion function
+# 2. Regex-safe conversion for wildcard rules
 def to_safe_regex(val):
     if val is None:
         return None
-    val = val.replace("'", "''")        # Escape single quotes for Spark SQL
-    val = val.replace("%", ".*")        # Convert SQL wildcard to regex
+    val = val.replace("'", "''")  # escape single quote for Spark SQL
+    val = val.replace("%", ".*")
     if not val.startswith('%'):
         val = '^' + val
     if not val.endswith('%'):
@@ -94,7 +97,7 @@ def to_safe_regex(val):
 
 regex_udf = udf(to_safe_regex, StringType())
 
-# 3. Columns used for matching
+# 3. Columns to match on
 matching_columns = [
     "dr_acct_num", "cr_acct_num",
     "dr_fin_inst", "cr_fin_inst",
@@ -103,40 +106,62 @@ matching_columns = [
     "tentr", "ncorg", "tdisc"
 ]
 
-# 4. Preprocess rules_df to generate regex-safe columns
-for colname in matching_columns:
-    rules_df = rules_df.withColumn(f"{colname}_regex_safe", regex_udf(col(colname)))
+# 4. Preprocess rules_df: create is_like + regex_safe columns
+def preprocess_rules(rules_df, match_cols):
+    for colname in match_cols:
+        rules_df = rules_df.withColumn(
+            f"{colname}_is_like",
+            when(col(colname).contains('%'), lit(True)).otherwise(lit(False))
+        ).withColumn(
+            f"{colname}_regex_safe",
+            when(col(colname).contains('%'), regex_udf(col(colname))).otherwise(None)
+        )
+    return rules_df
 
-# 5. Add transaction ID to transactions_df
+# Example usage:
+# rules_df = preprocess_rules(rules_df, matching_columns)
+
+# 5. Add txn_id to transactions_df
 transactions_df = transactions_df.withColumn("txn_id", monotonically_increasing_id())
 
-# 6. Broadcast rules_df
+# 6. Broadcast rules and cross join
+rules_df = preprocess_rules(rules_df, matching_columns)
 rules_broadcast = rules_df.select(
-    ['rule_id', 'purpose_lvl1', 'purpose_lvl2', 'purpose_lvl3', 'purpose_lvl4'] +
-    [f"{col}_regex_safe" for col in matching_columns]
+    ["rule_id", "purpose_lvl1", "purpose_lvl2", "purpose_lvl3", "purpose_lvl4"] +
+    [f"{col}_is_like" for col in matching_columns] +
+    [f"{col}_regex_safe" for col in matching_columns] +
+    matching_columns
 )
 
-# 7. Cross join (lazy — does not materialize yet)
 joined_df = transactions_df.crossJoin(rules_broadcast)
 
-# 8. Build vectorized filter condition
+# 7. Build filtering condition
 condition = lit(True)
 for colname in matching_columns:
+    is_like_col = f"{colname}_is_like"
     regex_col = f"{colname}_regex_safe"
+    rule_val_col = col(colname)
+    txn_val_col = col(f"transactions_df.{colname}") if f"transactions_df.{colname}" in joined_df.columns else col(colname)
+
     condition = condition & (
-        col(regex_col).isNull() | col(colname).rlike(col(regex_col))
+        rule_val_col.isNull() |
+        (col(is_like_col) & txn_val_col.rlike(col(regex_col))) |
+        (~col(is_like_col) & (txn_val_col == rule_val_col))
     )
 
-# 9. Filter matches
 filtered_df = joined_df.filter(condition)
 
-# 10. If multiple rules match, pick the top-priority rule
-w = Window.partitionBy("txn_id").orderBy("rule_id")  # use priority field if available
+# 8. Resolve multiple rule matches by keeping top rule per txn
+w = Window.partitionBy("txn_id").orderBy("rule_id")
 final_matched = filtered_df.withColumn("rn", row_number().over(w)).filter("rn = 1")
 
-# 11. Join purpose codes back to original transactions
+# 9. Join purpose codes back to transactions_df
 transactions_with_purpose = transactions_df.join(
-    final_matched.select("txn_id", "purpose_lvl1", "purpose_lvl2", "purpose_lvl3", "purpose_lvl4"),
+    final_matched.select(
+        "txn_id", "purpose_lvl1", "purpose_lvl2", "purpose_lvl3", "purpose_lvl4"
+    ),
     on="txn_id",
     how="left"
 )
+
+# transactions_with_purpose now contains enriched results
